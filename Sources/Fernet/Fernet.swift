@@ -19,16 +19,28 @@ import Foundation
  */
 
 public struct Fernet {
+    let makeDate: () -> Date
+    let makeIV: (Int) -> [UInt8]
     let signingKey: Data
     let encryptionKey: Data
 
-    public init(encodedKey: Data) throws {
+    public init(
+        encodedKey: Data,
+        makeDate: @escaping () -> Date = Date.init,
+        makeIV: @escaping (Int) -> [UInt8] = AES.randomIV
+    ) throws {
         guard let fernetKey = Data(base64URLData: encodedKey) else { throw KeyError.invalidFormat }
-        try self.init(key: fernetKey)
+        try self.init(key: fernetKey, makeDate: makeDate, makeIV: makeIV)
     }
 
-    public init(key: Data) throws {
+    public init(
+        key: Data,
+        makeDate: @escaping () -> Date = Date.init,
+        makeIV: @escaping (Int) -> [UInt8] = AES.randomIV
+    ) throws {
         guard key.count == 32 else { throw KeyError.invalidLength }
+        self.makeDate = makeDate
+        self.makeIV = makeIV
         self.signingKey = key.prefix(16)
         self.encryptionKey = key.suffix(16)
     }
@@ -55,6 +67,26 @@ public struct Fernet {
 
         return DecodeOutput(data: plaintext, hmacSuccess: hmacMatches)
     }
+
+    public func encode(_ data: Data) throws -> Data {
+        let timestamp: [UInt8] = {
+            let now = self.makeDate()
+            let timestamp = Int(now.timeIntervalSince1970).bigEndian
+            return withUnsafeBytes(of: timestamp, Array.init)
+        }()
+        guard case let iv = self.makeIV(16), iv.count == 16 else { throw EncodingError.invalidIV }
+        let ciphertext: [UInt8]
+        do {
+            let aes = try AES(key: self.encryptionKey.bytes, blockMode: CBC(iv: iv), padding: .pkcs7)
+            ciphertext = try aes.encrypt(data.bytes)
+        } catch {
+            throw EncodingError.aesError(error)
+        }
+        let version: [UInt8] = [0x80]
+        let hmac = try makeVerificationHMAC(data: Data(version + timestamp + iv + ciphertext), key: self.signingKey)
+        let fernetToken = (version + timestamp + iv + ciphertext + hmac).base64URLEncodedData()
+        return fernetToken
+    }
 }
 
 extension Fernet {
@@ -72,10 +104,20 @@ extension Fernet {
         case unknownVersion
     }
 
+    public enum EncodingError: Error {
+        case aesError(any Error)
+        case hmacError(any Error)
+        case invalidIV
+    }
+
     public struct DecodeOutput {
         var data: Data
         var hmacSuccess: Bool
     }
+}
+
+func computeHMAC(data: Data, key: Data) throws -> Data {
+    Data(try HMAC(key: key.bytes, variant: .sha2(.sha256)).authenticate(data.bytes))
 }
 
 func decrypt(ciphertext: Data, key: Data, iv: Data) throws -> Data {
@@ -88,9 +130,17 @@ func decrypt(ciphertext: Data, key: Data, iv: Data) throws -> Data {
     }
 }
 
+func makeVerificationHMAC(data: Data, key: Data) throws -> Data {
+    do {
+        return try computeHMAC(data: data, key: key)
+    } catch {
+        throw Fernet.EncodingError.hmacError(error)
+    }
+}
+
 func verifyHMAC(_ mac: Data, authenticating data: Data, using key: Data) throws -> Bool {
     do {
-        let auth = try HMAC(key: key.bytes, variant: .sha2(.sha256)).authenticate(data.bytes)
+        let auth = try computeHMAC(data: data, key: key)
         return constantTimeEquals(auth, mac)
     } catch {
         throw Fernet.DecodingError.hmacError(error)
@@ -121,6 +171,19 @@ extension Data {
             decoded.append(ASCII.equals.rawValue)
         }
         self.init(base64Encoded: Data(decoded))
+    }
+
+    func base64URLEncodedData() -> Data {
+        let bytes = self.base64EncodedData()
+            .compactMap { b in
+                switch b {
+                case ASCII.plus.rawValue: ASCII.dash.rawValue
+                case ASCII.slash.rawValue: ASCII.underscore.rawValue
+                case ASCII.equals.rawValue: nil
+                default: b
+                }
+            }
+        return Data(bytes)
     }
 }
 
