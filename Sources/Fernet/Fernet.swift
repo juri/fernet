@@ -28,6 +28,7 @@ public struct Fernet {
         encodedKey: Data,
         makeDate: @escaping () -> Date = Date.init,
         makeIV: @escaping (Int) -> [UInt8] = AES.randomIV
+//    ) throws(KeyError) {
     ) throws {
         guard let fernetKey = Data(base64URLData: encodedKey) else { throw KeyError.invalidFormat }
         try self.init(key: fernetKey, makeDate: makeDate, makeIV: makeIV)
@@ -37,6 +38,7 @@ public struct Fernet {
         key: Data,
         makeDate: @escaping () -> Date = Date.init,
         makeIV: @escaping (Int) -> [UInt8] = AES.randomIV
+//    ) throws(KeyError) {
     ) throws {
         guard key.count == 32 else { throw KeyError.invalidLength }
         self.makeDate = makeDate
@@ -45,6 +47,7 @@ public struct Fernet {
         self.encryptionKey = key.suffix(16)
     }
 
+//    public func decode(_ encoded: Data) throws(DecodingError) -> DecodeOutput {
     public func decode(_ encoded: Data) throws -> DecodeOutput {
         guard let fernetToken = Data(base64URLData: encoded) else { throw DecodingError.tokenDecodingFailed }
 
@@ -68,6 +71,7 @@ public struct Fernet {
         return DecodeOutput(data: plaintext, hmacSuccess: hmacMatches)
     }
 
+//    public func encode(_ data: Data) throws(EncodingError) -> Data {
     public func encode(_ data: Data) throws -> Data {
         let timestamp: [UInt8] = {
             let now = self.makeDate()
@@ -120,6 +124,7 @@ func computeHMAC(data: Data, key: Data) throws -> Data {
     Data(try HMAC(key: key.bytes, variant: .sha2(.sha256)).authenticate(data.bytes))
 }
 
+//func decrypt(ciphertext: Data, key: Data, iv: Data) throws(Fernet.DecodingError) -> Data {
 func decrypt(ciphertext: Data, key: Data, iv: Data) throws -> Data {
     do {
         let aes = try AES(key: key.bytes, blockMode: CBC(iv: iv.bytes), padding: .pkcs7)
@@ -130,6 +135,7 @@ func decrypt(ciphertext: Data, key: Data, iv: Data) throws -> Data {
     }
 }
 
+//func makeVerificationHMAC(data: Data, key: Data) throws(Fernet.EncodingError) -> Data {
 func makeVerificationHMAC(data: Data, key: Data) throws -> Data {
     do {
         return try computeHMAC(data: data, key: key)
@@ -138,6 +144,7 @@ func makeVerificationHMAC(data: Data, key: Data) throws -> Data {
     }
 }
 
+//func verifyHMAC(_ mac: Data, authenticating data: Data, using key: Data) throws(Fernet.DecodingError) -> Bool {
 func verifyHMAC(_ mac: Data, authenticating data: Data, using key: Data) throws -> Bool {
     do {
         let auth = try computeHMAC(data: data, key: key)
