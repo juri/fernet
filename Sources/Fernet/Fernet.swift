@@ -18,12 +18,14 @@ import Foundation
  HMAC, 256 bits
  */
 
+/// Fernet provides support for the [fernet](https://github.com/fernet/spec) encryption format.
 public struct Fernet {
     let makeDate: () -> Date
     let makeIV: (Int) -> [UInt8]
     let signingKey: Data
     let encryptionKey: Data
 
+    /// Initialize Fernet with a Base64URL encoded key.
     public init(
         encodedKey: Data,
         makeDate: @escaping () -> Date = Date.init,
@@ -34,6 +36,7 @@ public struct Fernet {
         try self.init(key: fernetKey, makeDate: makeDate, makeIV: makeIV)
     }
 
+    /// Initialize Fernet with raw, unencoded key.
     public init(
         key: Data,
         makeDate: @escaping () -> Date = Date.init,
@@ -47,6 +50,7 @@ public struct Fernet {
         self.encryptionKey = key.suffix(16)
     }
 
+    /// Decode fernet data.
 //    public func decode(_ encoded: Data) throws(DecodingError) -> DecodeOutput {
     public func decode(_ encoded: Data) throws -> DecodeOutput {
         guard let fernetToken = Data(base64URLData: encoded) else { throw DecodingError.tokenDecodingFailed }
@@ -71,6 +75,7 @@ public struct Fernet {
         return DecodeOutput(data: plaintext, hmacSuccess: hmacMatches)
     }
 
+    /// Encode data in the fernet format.
 //    public func encode(_ data: Data) throws(EncodingError) -> Data {
     public func encode(_ data: Data) throws -> Data {
         let timestamp: [UInt8] = {
@@ -94,11 +99,13 @@ public struct Fernet {
 }
 
 extension Fernet {
+    /// Errors encountered while processing the fernet key.
     public enum KeyError: Error {
         case invalidFormat
         case invalidLength
     }
 
+    /// Errors encountered while decoding data.
     public enum DecodingError: Error {
         case aesError(any Error)
         case hmacError(any Error)
@@ -108,14 +115,18 @@ extension Fernet {
         case unknownVersion
     }
 
+    /// Errors encountered while encoding data.
     public enum EncodingError: Error {
         case aesError(any Error)
         case hmacError(any Error)
         case invalidIV
     }
 
+    /// Decoding result.
     public struct DecodeOutput {
+        /// Decoded data.
         var data: Data
+        /// A boolean indicating if HMAC verification was successful.
         var hmacSuccess: Bool
     }
 }
