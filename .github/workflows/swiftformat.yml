@@ -16,7 +16,7 @@ jobs:
       - name: Set up Swift
         uses: swift-actions/setup-swift@v2.0.0
         with:
-          swift-version: 5.10
+          swift-version: "5.10"
 
       - name: Set up Mint
         uses: irgaly/setup-mint@v1.4.0
